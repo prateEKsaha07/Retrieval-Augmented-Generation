@@ -1,0 +1,8 @@
+Load your data (PDF / text / docs)
+Split into chunks
+Convert chunks → embeddings
+Store in vector DB
+User asks question
+Search similar chunks
+Send to LLM with context
+LLM answers smartly
