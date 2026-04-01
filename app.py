@@ -9,6 +9,7 @@ def create_new_db():
     print(len(chunks))
     print(chunks[0])
 
+
 # create_new_db()
 
 # query = input("ask something:")
@@ -20,4 +21,7 @@ def create_new_db():
 # changing to new version for more natural human like answers
 query = input("ask something:")
 chunks = retrieve_chunks(query)
+print(chunks)
 answers = generate_answer(query,chunks)
+
+print(answers)

@@ -40,34 +40,26 @@ def retrieve_chunks(query):
 # load the model
 def generate_answer(query, chunks):
     from transformers import pipeline
+    from transformers import AutoTokenizer, AutoModelForSeq2SeqLM
 
     context = "\n".join(chunks)
 
-    prompt = f"""
-Answer the question based only on the context below.
-If the answer is not present, say "I don't know".
+    prompt = f"""You are a helpful and intelligent assistant.Using the context below, answer the question in a clear and slightly detailed way in 2 to 4 lines.Explain like you're teaching a beginner.
+    If the answer is not present, say "I don't know".
+    Context:{context}
+    Question:{query}
+    Answer:
+    """
+    tokenizer = AutoTokenizer.from_pretrained("google/flan-t5-base")
+    model = AutoModelForSeq2SeqLM.from_pretrained("google/flan-t5-base")
 
-Context:
-{context}
+    inputs = tokenizer(prompt,return_tensors= "pt")
 
-Question:
-{query}
-
-Answer:
-"""
-    generator = pipeline(
-        "text-generation",
-        model="distilgpt2"
+    # loading new model
+    output = model.generate(
+        **inputs,
+        max_new_tokens = 100
     )
-
-    response = generator(
-        prompt,
-        max_new_tokens=100,
-        do_sample=False,
-        temperature=None  # explicitely diseabled because its causing a way too much problem in run time
-    )
-
-    full_text = response[0]["generated_text"]
-    answer = full_text.split("Answer:")[-1].strip()
-
+    
+    answer = tokenizer.decode(output[0],skip_special_tokens = True)
     return answer
