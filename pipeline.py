@@ -35,3 +35,39 @@ def retrieve_chunks(query):
         filtered = [doc.page_content for doc, _ in results[:3]]
 
     return filtered[:3]
+
+  
+# load the model
+def generate_answer(query, chunks):
+    from transformers import pipeline
+
+    context = "\n".join(chunks)
+
+    prompt = f"""
+Answer the question based only on the context below.
+If the answer is not present, say "I don't know".
+
+Context:
+{context}
+
+Question:
+{query}
+
+Answer:
+"""
+    generator = pipeline(
+        "text-generation",
+        model="distilgpt2"
+    )
+
+    response = generator(
+        prompt,
+        max_new_tokens=100,
+        do_sample=False,
+        temperature=None  # explicitely diseabled because its causing a way too much problem in run time
+    )
+
+    full_text = response[0]["generated_text"]
+    answer = full_text.split("Answer:")[-1].strip()
+
+    return answer
