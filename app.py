@@ -4,17 +4,34 @@ from pipeline import create_vector_store, retrieve_chunks, generate_answer
 # original_data = load_data()
 # print(len(original_data))
 
-# # STEP 1: create DB again (run only once)
+# create DB 
 # original_data = load_data()
 # chunks = split_data(original_data)
 # create_vector_store(chunks)
 
-# # STEP 2: query
-query = input("ask something: ")
+
+query =input("ask: ")
+
 chunks = retrieve_chunks(query)
-print("these are chunks \n")
-
 print(chunks)
+answer = generate_answer(query,chunks)
+print(answer)
 
-answers = generate_answer(query, chunks)
-print(f"the output of the query: {query} is ", "\n", {answers})
+
+
+
+
+
+
+# query
+# query = input("ask something: ")
+# chunks = retriever.get_relevent_documents(query)
+# answers = generate_answer(query, chunks)
+
+# chunks = retrieve_chunks(query)
+# print("these are chunks \n")
+
+# print(chunks)
+
+# answers = generate_answer(query, chunks)
+# print(f"the output of the query: {query} is ", "\n", {answers})

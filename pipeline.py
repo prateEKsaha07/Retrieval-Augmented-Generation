@@ -4,14 +4,15 @@ from transformers import AutoTokenizer, AutoModelForSeq2SeqLM
 import os
 import re
 
+
 # GLOBAL MODELS
 EMBEDDINGS = HuggingFaceEmbeddings(
     model_name="sentence-transformers/all-MiniLM-L6-v2",
     cache_folder="./models"
 )
-
-# TOKENIZER = AutoTokenizer.from_pretrained("google/flan-t5-base")
-# MODEL = AutoModelForSeq2SeqLM.from_pretrained("google/flan-t5-base")
+MODEL_NAME = "google/flan-t5-base"
+tokenizer = AutoTokenizer.from_pretrained(MODEL_NAME)
+model = AutoModelForSeq2SeqLM.from_pretrained(MODEL_NAME)
 
 DB_PATH = "db/faiss_index"
 
@@ -65,42 +66,87 @@ def retrieve_chunks(query, k=5):
 
     return [chunk[0] for chunk in scored_chunks[:2]]
 
-# GENERATE ANSWER
-def generate_answer(query, chunks):
-    TOKENIZER = AutoTokenizer.from_pretrained("google/flan-t5-small")
-    MODEL = AutoModelForSeq2SeqLM.from_pretrained("google/flan-t5-small")
-    if not chunks:
-        return "I don't have enough information to answer that."
 
-    context = "\n".join(chunks)
+# extraction function 
+def extract_relevant_sentences(chunks, query):
+    query_words = query.lower().split()
+    best_sentence = []
+    max_score = 0
 
+    for chunk in chunks:
+        sentences = chunk.split(".")
+        for sentence in sentences:
+            score = sum(word in sentence.lower() for word in query_words)
+            if score > max_score:
+                max_score = score
+                best_sentence = sentence.strip()
+    return best_sentence
+
+# def get_chunks(query):
+#     docs = retriever.get_relevant_document(query)
+#     return [doc.page_content for doc in docs]
+
+# generate answers
+def generate_answer(query,chunks):
+    # will now try to extract only the relavant sentances
+    context = extract_relevant_sentences(chunks, query)
+
+    # prompt for LLm
     prompt = f"""
-Answer the question using only the given context.
+answer the following question using the sentence
 
-Return the answer as ONE complete sentence.
-Start with the term asked in the question.
+sentence :{context}
 
-Do not list phrases. Do not repeat words.
+question :{query}
 
-Context:
-{context}
-
-Question:
-{query}
-
-Answer:
+answer in clear one sentence 
 """
-
-    inputs = TOKENIZER(prompt, return_tensors="pt")
-
-    output = MODEL.generate(
-        **inputs,
-        max_new_tokens=60,
-        min_length=30,
-        do_sample=False,
-        num_beams=4,
-        early_stopping=True
+    inputs = tokenizer(prompt,return_tensors="pt")
+    outputs = model.generate(
+        inputs["input_ids"],
+        max_new_tokens = 50,
+        do_sample = False,
+        num_beams = 4
     )
+    return tokenizer.decode(outputs[0], skip_special_tokens=True)
 
-    answer = TOKENIZER.decode(output[0], skip_special_tokens=True)
-    return answer
+# GENERATE ANSWER
+# im scapping this fution because there were some problem with the model while generating answers so im shifting to hybrid rag for some exprimentation
+# def generate_answer(query, chunks):
+#     TOKENIZER = AutoTokenizer.from_pretrained("google/flan-t5-small")
+#     MODEL = AutoModelForSeq2SeqLM.from_pretrained("google/flan-t5-small")
+#     if not chunks:
+#         return "I don't have enough information to answer that."
+
+#     context = "\n".join(chunks)
+
+#     prompt = f"""
+# Answer the question using only the given context.
+
+# Return the answer as ONE complete sentence.
+# Start with the term asked in the question.
+
+# Do not list phrases. Do not repeat words.
+
+# Context:
+# {context}
+
+# Question:
+# {query}
+
+# Answer:
+# """
+
+#     inputs = TOKENIZER(prompt, return_tensors="pt")
+
+#     output = MODEL.generate(
+#         **inputs,
+#         max_new_tokens=60,
+#         min_length=30,
+#         do_sample=False,
+#         num_beams=4,
+#         early_stopping=True
+#     )
+
+#     answer = TOKENIZER.decode(output[0], skip_special_tokens=True)
+#     return answer
