@@ -70,16 +70,27 @@ def retrieve_chunks(query, k=5):
 # extraction function 
 def extract_relevant_sentences(chunks, query):
     query_words = query.lower().split()
-    best_sentence = []
+    stopwords = {"What","is","are","Which","How","the","of","in"}
+    query_words = [w for w in query_words if w not in stopwords]
+    
+    best_sentence = ""
     max_score = 0
 
     for chunk in chunks:
         sentences = chunk.split(".")
         for sentence in sentences:
-            score = sum(word in sentence.lower() for word in query_words)
+            sentence_lower = sentence.lower()
+
+            # searching for the strong matches
+            score = sum(2 for word in query_words if word in sentence_lower)
+           
+            # giving it some bonus points if the exact word is found
+            if query.lower() in sentence_lower:
+                score = score + 3
             if score > max_score:
                 max_score = score
                 best_sentence = sentence.strip()
+
     return best_sentence
 
 # def get_chunks(query):
