@@ -1,31 +1,50 @@
 from langchain_community.vectorstores import FAISS
-# from langchain_community.embeddings import HuggingFaceEmbeddings
 from langchain_huggingface import HuggingFaceEmbeddings
+from transformers import AutoTokenizer, AutoModelForSeq2SeqLM
 import os
+import re
+
+# GLOBAL MODELS
+EMBEDDINGS = HuggingFaceEmbeddings(
+    model_name="sentence-transformers/all-MiniLM-L6-v2",
+    cache_folder="./models"
+)
+
+# TOKENIZER = AutoTokenizer.from_pretrained("google/flan-t5-base")
+# MODEL = AutoModelForSeq2SeqLM.from_pretrained("google/flan-t5-base")
+
+DB_PATH = "db/faiss_index"
+
+# CREATING VECTOR DATABASE
 
 def create_vector_store(chunks):
-    Embeddings = HuggingFaceEmbeddings(model_name="all-MiniLM-L6-v2")
-    vector_db = FAISS.from_texts(chunks,Embeddings)
-    
-    # saving the db
+    if not chunks:
+        raise ValueError("No chunks provided to create vector store.")
+
+    print("Creating FAISS vector store...")
+    vector_db = FAISS.from_texts(chunks, EMBEDDINGS)
+
     os.makedirs("db", exist_ok=True)
-    vector_db.save_local("db/FAISS_index") 
-    print("vectors stored successfully")
+    vector_db.save_local(DB_PATH)
 
+    print("Vector DB created successfully!")
 
-def retrieve_chunks(query):
-    embeddings = HuggingFaceEmbeddings(model_name="all-MiniLM-L6-v2")
+# RETRIEVING RELEVANT CHUNKS
+def retrieve_chunks(query, k=5):
+    if not os.path.exists(DB_PATH):
+        raise ValueError("FAISS DB not found. Run create_vector_store first.")
 
     db = FAISS.load_local(
-        "db/faiss_index",
-        embeddings,
+        DB_PATH,
+        EMBEDDINGS,
         allow_dangerous_deserialization=True
     )
 
-    results = db.similarity_search_with_score(query, k=5)
+    results = db.similarity_search_with_score(query, k=2)
 
+    # basic keyword filtering
     stopwords = {"who", "are", "is", "the", "what", "which"}
-    query_words = [w for w in query.lower().split() if w not in stopwords]
+    query_words = [w for w in re.findall(r'\w+', query.lower()) if w not in stopwords]
 
     scored_chunks = []
 
@@ -33,52 +52,55 @@ def retrieve_chunks(query):
         text = doc.page_content.lower()
         keyword_match = sum(word in text for word in query_words)
 
-        if score < 0.7:
+        # relaxed threshold
+        if score < 1.5:
             scored_chunks.append((doc.page_content, score, keyword_match))
 
+    # fallback if nothing passes filter
     if not scored_chunks:
         return [doc.page_content for doc, _ in results[:3]]
 
-    # sort by similarity + keyword relevance
+    # sort: best similarity + keyword relevance
     scored_chunks.sort(key=lambda x: (x[1], -x[2]))
 
     return [chunk[0] for chunk in scored_chunks[:2]]
 
-  
-# load the model
+# GENERATE ANSWER
 def generate_answer(query, chunks):
-    from transformers import pipeline
-    from transformers import AutoTokenizer, AutoModelForSeq2SeqLM
+    TOKENIZER = AutoTokenizer.from_pretrained("google/flan-t5-small")
+    MODEL = AutoModelForSeq2SeqLM.from_pretrained("google/flan-t5-small")
+    if not chunks:
+        return "I don't have enough information to answer that."
 
     context = "\n".join(chunks)
 
-    prompt = f"""You are a helpful AI assistant.
+    prompt = f"""
+Answer the question using only the given context.
 
-    Answer the question using the context below.
-    Explain the answer in 2-4 complete sentences.
-    Do not give short phrases or incomplete answers.
-    Include important details from the context.
+Return the answer as ONE complete sentence.
+Start with the term asked in the question.
 
-    Context:{context}
+Do not list phrases. Do not repeat words.
 
-    Question:{query}
+Context:
+{context}
 
-    Answer:
-    """
-    tokenizer = AutoTokenizer.from_pretrained("google/flan-t5-base")
-    model = AutoModelForSeq2SeqLM.from_pretrained("google/flan-t5-base")
+Question:
+{query}
 
-    inputs = tokenizer(prompt,return_tensors= "pt")
+Answer:
+"""
 
-    # loading new model
-    output = model.generate(
+    inputs = TOKENIZER(prompt, return_tensors="pt")
+
+    output = MODEL.generate(
         **inputs,
-        max_new_tokens = 200,
-        min_length = 60, #incresing the answer's size
-        do_sample = False,
-        repetition_penalty = 1.2, # stopping from repeating same line agin and again
-        no_repeat_ngram_size = 3  #  blocks phrase loops
+        max_new_tokens=60,
+        min_length=30,
+        do_sample=False,
+        num_beams=4,
+        early_stopping=True
     )
-    
-    answer = tokenizer.decode(output[0],skip_special_tokens = True)
+
+    answer = TOKENIZER.decode(output[0], skip_special_tokens=True)
     return answer

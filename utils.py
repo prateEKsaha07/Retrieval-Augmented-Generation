@@ -1,16 +1,26 @@
+import re
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 
-# data loader
 def load_data():
     with open("data/data.txt", "r") as f:
-        data = f.read()
-    return data
+        return f.read()
 
 def split_data(data):
+    # split by sections (## headings)
+    sections = re.split(r'\n##\s+', data)
+
+    all_chunks = []
     splitter = RecursiveCharacterTextSplitter(
-        chunk_size = 500,
-        chunk_overlap = 100,
-        separators = ["\n\n", "\n", ".", " ",""]
+        chunk_size=500,
+        chunk_overlap=100
     )
-    chunks = splitter.split_text(data)
-    return chunks
+
+    for section in sections:
+        if not section.strip():
+            continue
+
+        # optional: keep section title
+        section_chunks = splitter.split_text(section)
+        all_chunks.extend(section_chunks)
+
+    return all_chunks
