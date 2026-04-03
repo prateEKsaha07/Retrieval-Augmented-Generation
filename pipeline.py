@@ -68,28 +68,30 @@ def retrieve_chunks(query, k=5):
 
 
 # extraction function 
-def extract_relevant_sentences(chunks, query):
-    query_words = query.lower().split()
-    stopwords = {"What","is","are","Which","How","the","of","in"}
-    query_words = [w for w in query_words if w not in stopwords]
-    
+def extract_relevant_sentence(chunks, query):
+    stopwords = {"what","is","are","which","how","the","of","in"}
+
+    query_words = [
+        w for w in re.findall(r'\b\w+\b', query.lower())
+        if w not in stopwords
+    ]
+
     best_sentence = ""
-    max_score = 0
 
     for chunk in chunks:
         sentences = chunk.split(".")
         for sentence in sentences:
             sentence_lower = sentence.lower()
+            words = re.findall(r'\b\w+\b', sentence_lower)
 
-            # searching for the strong matches
-            score = sum(2 for word in query_words if word in sentence_lower)
-           
-            # giving it some bonus points if the exact word is found
-            if query.lower() in sentence_lower:
-                score = score + 3
-            if score > max_score:
-                max_score = score
-                best_sentence = sentence.strip()
+            # will check each word properly
+            if any(word in words for word in query_words):
+
+                # avoid similar word confusion confusion
+                if any(f"{word}/" in sentence_lower for word in query_words):
+                    continue
+
+                return sentence.strip()
 
     return best_sentence
 
@@ -100,7 +102,7 @@ def extract_relevant_sentences(chunks, query):
 # generate answers
 def generate_answer(query,chunks):
     # will now try to extract only the relavant sentances
-    context = extract_relevant_sentences(chunks, query)
+    context = extract_relevant_sentence(chunks, query)
 
     # prompt for LLm
     prompt = f"""
