@@ -3,7 +3,7 @@ from langchain_huggingface import HuggingFaceEmbeddings
 from transformers import AutoTokenizer, AutoModelForSeq2SeqLM
 import os
 import re
-
+import torch
 
 # GLOBAL MODELS
 EMBEDDINGS = HuggingFaceEmbeddings(
@@ -13,11 +13,9 @@ EMBEDDINGS = HuggingFaceEmbeddings(
 MODEL_NAME = "google/flan-t5-base"
 tokenizer = AutoTokenizer.from_pretrained(MODEL_NAME)
 model = AutoModelForSeq2SeqLM.from_pretrained(MODEL_NAME)
-
 DB_PATH = "db/faiss_index"
 
 # CREATING VECTOR DATABASE
-
 def create_vector_store(chunks):
     if not chunks:
         raise ValueError("No chunks provided to create vector store.")
@@ -66,7 +64,6 @@ def retrieve_chunks(query, k=5):
 
     return [chunk[0] for chunk in scored_chunks[:2]]
 
-
 # extraction function 
 def extract_relevant_sentence(chunks, query):
     stopwords = {"what","is","are","which","how","the","of","in"}
@@ -78,49 +75,83 @@ def extract_relevant_sentence(chunks, query):
 
     best_sentence = ""
 
+    query_lower = query.lower()
+    is_definition = query_lower.startswith("what is") or query_lower.startswith("define")
+
     for chunk in chunks:
-        sentences = chunk.split(".")
-        for sentence in sentences:
+        sentences = re.split(r'\.\s+|\n+', chunk)
+        for i, sentence in enumerate(sentences):
             sentence_lower = sentence.lower()
             words = re.findall(r'\b\w+\b', sentence_lower)
 
-            # will check each word properly
-            if any(word in words for word in query_words):
+            # will check each word properly(correction // exact match only)
+            if any(word == w for word in query_words for w in words):
 
-                # avoid similar word confusion confusion
+                # avoid similar word confusion confusion in my case it was confusing with TCP with TCP/IP 
                 if any(f"{word}/" in sentence_lower for word in query_words):
                     continue
 
-                return sentence.strip()
+                # returns 2 sentences 
+                # next_sentence = sentences[i+1].strip() if i+1 < len(sentence) else ""
 
-    return best_sentence
+                # robust 2 sentence logic(it will try ever line not just 2nd line and select the most maning full line as the partner line)
+                next_sentence = ""
 
-# def get_chunks(query):
-#     docs = retriever.get_relevant_document(query)
-#     return [doc.page_content for doc in docs]
+                for j in range(i+1, len(sentences)):
+                    candidate = sentences[j].strip()
+                    candidate_lower = candidate.lower()
+
+                    #must contain same keyword (DNS in this case)
+                    if any(word in candidate_lower for word in query_words):
+                        next_sentence = candidate
+                        break
+
+                    # allows example lines in most defination cases it contains defination then examples so this will also consider that example
+                    if "for example" in candidate_lower:
+                        next_sentence = candidate
+                        break
+
+                if is_definition:
+                    return sentence.strip()
+                else:
+                    return(sentence.strip()+ ". "+ next_sentence.strip()).strip()
+                # return sentence.strip() + ". " + next_sentence.strip()
+
+                # return sentence.strip() # it returns only one sentence
+    return ""
 
 # generate answers
 def generate_answer(query,chunks):
     # will now try to extract only the relavant sentances
     context = extract_relevant_sentence(chunks, query)
 
+    query_lower = query.lower()
+    is_definition = query_lower.startswith("what is") or query_lower.startswith("define")
+
+    if not is_definition:
+        return context # skipping completely if its not an definition
+
     # prompt for LLm
     prompt = f"""
-answer the following question using the sentence
+Use ALL the information given below.
 
-sentence :{context}
+Do NOT shorten the answer.
+Do NOT summarize.
+Return full explanation.
 
-question :{query}
+Text:
+{context}
 
-answer in clear one sentence 
+Question: {query}
+Answer:
 """
     inputs = tokenizer(prompt,return_tensors="pt")
-    outputs = model.generate(
+    with torch.no_grad():
+        outputs = model.generate(
         inputs["input_ids"],
         max_new_tokens = 50,
         do_sample = False,
-        num_beams = 4
-    )
+        )
     return tokenizer.decode(outputs[0], skip_special_tokens=True)
 
 # GENERATE ANSWER
