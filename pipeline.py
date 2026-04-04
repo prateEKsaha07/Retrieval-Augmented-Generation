@@ -155,7 +155,8 @@ Answer:
     return tokenizer.decode(outputs[0], skip_special_tokens=True)
 
 # GENERATE ANSWER
-# im scapping this fution because there were some problem with the model while generating answers so im shifting to hybrid rag for some exprimentation
+# im scrapping this function because there were some problem with the model while generating answers so im shifting to hybrid rag for some exprimentation
+
 # def generate_answer(query, chunks):
 #     TOKENIZER = AutoTokenizer.from_pretrained("google/flan-t5-small")
 #     MODEL = AutoModelForSeq2SeqLM.from_pretrained("google/flan-t5-small")
